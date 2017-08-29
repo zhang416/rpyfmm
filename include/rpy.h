@@ -330,7 +330,46 @@ public:
 
   void S_to_T(const Source *s_first, const Source *s_last, 
               Target *t_first, Target *t_last) const {
-    // TODO
+    double a = rpy_table_->a(); 
+    double c0 = rpy_table_->c0(); 
+    double c1 = rpy_table_->c1();
+    double c2 = rpy_table_->c2(); 
+
+    for (auto i = t_first; i != t_last; ++i) {
+      double v0 = 0.0, v1 = 0.0, v2 = 0.0; 
+      for (auto j = s_first; j != s_last; ++j) {
+        double x = i->position.x() - j->position.x(); 
+        double y = i->position.y() - j->position.y(); 
+        double z = i->position.z() - j->position.z(); 
+        double q0 = j->q[0]; 
+        double q1 = j->q[1];
+        double q2 = j->q[2]; 
+        double r = sqrt(x * x + y * y + z * z); 
+
+        if (r >= 2 * a) {
+          double t0 = (q0 * x + q1 * y + q2 * z) / pow(r, 3); 
+          double t1 = c1 / r; 
+          double t2 = c2 / pow(r, 3); 
+          double t3 = 3 * c2 / pow(r, 2); 
+
+          v0 += t1 * q0 + x * t0 + t2 * q0 - t3 * t0 * x;
+          v1 += t1 * q1 + y * t0 + t2 * q1 - t3 * t0 * y;
+          v2 += t1 * q2 + z * t0 + t2 * q2 - t3 * t0 * z;
+        } else {
+          double c3 = 9.0 / 32.0 / a; 
+          double c4 = 3.0 / 32.0 / a;
+          double A1 = c0 * (1 - c3 * r); 
+          double A2 = c4 * (q0 * x + q1 * y + q2 * z) / r;
+          
+          v0 += A1 * q0 + A2 * x; 
+          v1 += A1 * q1 + A2 * y; 
+          v2 += A1 * q2 + A2 * z;
+        }
+      }
+      i->value[0] += v0; 
+      i->value[1] += v1; 
+      i->value[2] += v2; 
+    }      
   }
 
   std::unique_ptr<expansion_t> M_to_I() const {
