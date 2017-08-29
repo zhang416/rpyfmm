@@ -246,6 +246,7 @@ public:
     double c2 = rpy_table_->c2(); 
 
     // Compute M5 from M1, M2, and M3 
+    compute_M5(M1, M2, M3, M5); 
 
     for (auto i = first; i != last; ++i) {
       Point dist = point_sub(i->position, views_.center()); 
@@ -293,6 +294,7 @@ public:
     double c2 = rpy_table_->c2(); 
 
     // Compute L5 from L1, L2, and L3 
+    compute_L5(L1, L2, L3, L5); 
 
     for (auto i = first; i != last; ++i) {
       Point dist = point_sub(i->position, views_.center()); 
@@ -430,6 +432,15 @@ public:
 
 private: 
   ViewSet views_; 
+
+  void compute_M5(const dcomplex_t *M1, const dcomplex_t *M2, 
+                  const dcomplex_t *M3, dcomplex_t *M5) {
+  }
+
+  void compute_L5(const dcomplex_t *L1, const dcomplex_t *L2, 
+                  const dcomplex_t *L3, dcomplex_t *L5) {
+  }
+
 };    
        
 
