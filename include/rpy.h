@@ -239,45 +239,14 @@ public:
     dcomplex_t *M3 = reinterpret_cast<dcomplex_t *>(views_.view_data(0));
     dcomplex_t *M4 = reinterpret_cast<dcomplex_t *>(views_.view_data(0));
 
-    int p = builtin_laplace_table_->p(); 
-    dcomplex_t *M5 = new dcomplex_t[(p + 1) * (p + 2) / 2](); 
-
-    double c1 = rpy_table_->c1(); 
-    double c2 = rpy_table_->c2(); 
-
-    // Compute M5 from M1, M2, and M3 
-    compute_M5(M1, M2, M3, M5); 
-
     for (auto i = first; i != last; ++i) {
       Point dist = point_sub(i->position, views_.center()); 
-      double x = dist.x(); 
-      double y = dist.y(); 
-      double z = dist.z(); 
-      
-      auto Res1 = lap_m_to_t(dist, scale, M1, true); 
-      auto Res2 = lap_m_to_t(dist, scale, M2, true); 
-      auto Res3 = lap_m_to_t(dist, scale, M3, true); 
-      auto Res4 = lap_m_to_t(dist, scale, M4, true); 
-      auto Res5 = lap_m_to_t(dist, scale, M5, true); 
+      auto result = rpy_m_to_t(dist, scale, M1, M2, M3, M4); 
 
-      double v1 = c1 * Res1[0] + 
-        c1 * (x * Res1[1] + y * Res2[1] + z * Res3[1]) + 
-        Res4[1] - c2 * Res5[1]; 
-
-      double v2 = c1 * Res2[0] + 
-        c1 * (x * Res1[2] + y * Res2[2] + z * Res3[2]) + 
-        Res4[2] - c2 * Res5[2]; 
-      
-      double v3 = c1 * Res3[0] + 
-        c1 * (x * Res1[3] + y * Res2[3] + z * Res3[3]) + 
-        Res4[3] - c2 * Res5[3]; 
-
-      i->value[0] += v1; 
-      i->value[1] += v2; 
-      i->value[2] += v3; 
+      i->value[0] += result[0]; 
+      i->value[1] += result[1];
+      i->value[2] += result[2];
     }
-    
-    delete [] M5; 
   }
 
   void L_to_T(Target *first, Target *last) const {
@@ -441,6 +410,127 @@ public:
 private: 
   ViewSet views_; 
 
+  std::vector<double> rpy_m_to_t(Point t, double scale, 
+                                 const dcomplex_t *M1, 
+                                 const dcomplex_t *M2, 
+                                 const dcomplex_t *M3, 
+                                 const dcomplex_t *M4) const {
+    std::vector<double> retval(3, 0.0); 
+
+    double c1 = rpy_table_->c1(); 
+    double c2 = rpy_table_->c2(); 
+    int p = builtin_laplace_table_->p();
+    const double *sqf = builtin_laplace_table_->sqf();
+
+    std::vector<double> legendre((p + 2) * (p + 3) / 2); 
+    std::vector<double> powers_r(p + 2); 
+    std::vector<dcomplex_t> powers_ephi(p + 2); 
+    
+    powers_r[0] = 1.0; 
+    powers_ephi[0] = dcomplex_t{1.0, 0.0}; 
+
+    double x = t.x(); 
+    double y = t.y(); 
+    double z = t.z(); 
+    double proj = sqrt(x * x + y * y); 
+    double r = t.norm(); 
+    double scale2 = scale * scale; 
+
+    // Compute cosine of the polar angle theta
+    double ctheta = (r <= 1e-14 ? 1.0 : z / r); 
+
+    // Compute exp(i * phi) for the azimuthal angle phi
+    dcomplex_t ephi = (proj / r <= 1e-14 ? dcomplex_t{1.0, 0.0} : 
+                       dcomplex_t{x / proj, y / proj}); 
+
+    // Compute powers of r 
+    r *= scale; 
+    for (int j = 1; j <= p + 1; ++j) 
+      powers_r[j] = powers_r[j - 1] * r; 
+
+    // Compute powers of exp(i * phi)
+    for (int j = 1; j <= p + 1; ++j) 
+      powers_ephi[j] = powers_ephi[j - 1] * ephi; 
+
+    // Compute value of the Legendre polynomial
+    legendre_Plm(p + 1, ctheta, legendre.data()); 
+
+    // Process L1
+    {
+      auto s1 = eval_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
+      retval[0] += c1 * s1; 
+
+      auto s2 = gradient0_L(p, L1, sqf, powers_r, legendre, powers_ephi);
+      retval[2] -= c1 * x * s2 * scale; 
+
+      auto s3 = gradientp_L(p, L1, sqf, powers_r, legendre, powers_ephi);
+      retval[0] -= c1 * x * real(s3) * scale; 
+      retval[1] -= c1 * x * imag(s3) * scale; 
+      
+      auto s4 = gradientp0_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] += c2 * real(s4) * scale2; 
+
+      auto s5 = gradientpp_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
+      auto s6 = gradientmp_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
+
+      retval[0] += c2 * real(s5 + s6) / 2 * scale2; 
+      retval[1] += c2 * imag(s5) / 2 * scale2; 
+    }
+
+    // Process L2 
+    {
+      auto s1 = eval_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
+      retval[1] += c1 * s1; 
+
+      auto s2 = gradient0_L(p, L2, sqf, powers_r, legendre, powers_ephi);
+      retval[2] -= c1 * y * s2 * scale; 
+
+      auto s3 = gradientp_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
+      retval[0] -= c1 * y * real(s3) * scale; 
+      retval[1] -= c1 * y * imag(s3) * scale;
+
+      auto s4 = gradientp0_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] += c2 * imag(s4) * scale; 
+
+      auto s5 = gradientpp_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
+      auto s6 = gradientmp_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
+
+      retval[0] += c2 * imag(s5) / 2 * scale2; 
+      retval[1] += c2 * real(s6 - s5) / 2 * scale2; 
+    }
+
+    // Process L3 
+    {
+      auto s1 = eval_L(p, L3, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] += c1 * s1; 
+
+      auto s2 = gradient0_L(p, L3, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] -= c1 * z * s2 * scale; 
+
+      auto s3 = gradientp_L(p, L3, sqf, powers_r, legendre, powers_ephi); 
+      retval[0] -= c1 * z * real(s3) * scale; 
+      retval[1] -= c1 * z * imag(s3) * scale; 
+
+      auto s4 = gradientp0_L(p, L3, sqf, powers_r, legendre, powers_ephi);
+      retval[0] += c2 * real(s4) * scale2;
+      retval[1] += c2 * imag(s4) * scale2; 
+
+      auto s5 = gradient00_L(p, L3, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] += c2 * s5 * scale2;
+    }
+
+    // Process L4 
+    {
+      auto s1 = gradient0_L(p, L4, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] += s1 * scale; 
+
+      auto s2 = gradientp_L(p, L4, sqf, powers_r, legendre, powers_ephi); 
+      retval[0] += real(s2) * scale; 
+      retval[1] += imag(s2) * scale;
+    }
+        
+    return retval; 
+  }
 
 
 
@@ -564,6 +654,166 @@ private:
     }
         
     return retval; 
+  }
+  
+  // Compute a multipole expansion
+  double eval_M(int p, const dcomplex_t *M, const double *sqf, 
+                const std::vector<double> &powers_r, 
+                const std::vector<double> &legendre, 
+                const std::vector<dcomplex_t> &powers_ephi) const {
+    dcomplex_t s1{0.0, 0.0}; 
+
+    for (int n = 0; n <= p; ++n) 
+      s1 += M[midx(n, 0)] * powers_r[n] * legendre[midx(n, 0)]; 
+
+    for (int n = 1; n <= p; ++n) {
+      for (int m = 1; m <= n; ++m) {
+        s1 += 2.0 * real(M[midx(n, m)]) * powers_ephi[m] * 
+          powers_r[n] * legendre[midx(n, m)] * sqf[n - m] / sqf[n + m];
+      }
+    }
+
+    return real(s1); 
+  }
+
+  // Compute d/dz of a multipole expansion
+  double gradient0_M(int p, const dcomplex_t *M, const double *sqf, 
+                     const std::vector<double> &powers_r, 
+                     const std::vector<double> &legendre, 
+                     const std::vector<dcomplex_t> &powers_ephi) const {
+    dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+
+    for (int n = 0; n <= p; ++n) 
+      s1 += M[midx(n, 0)] * (n + 1) * legendre[midx(n + 1, 0)] * 
+        powers_r[n + 1]; 
+
+    for (int n = 1; n <= p; ++n) {
+      for (int m = 1; m <= n; ++m) {
+        s2 += M[midx(n, m)] * powers_r[n + 1] * legendre[midx(n + 1, m)] * 
+          sqf[n - m + 1] / sqf[n - m] * sqf[n - m + 1] / sqf[n + m] * 
+          powers_ephi[m]; 
+      }
+    }
+      
+    return -real(s1 + 2 * s2); 
+  }
+
+  // Compute d/dx + i * d/dy of a multipole expansion
+  dcomplex_t gradientp_M(int p, const dcomplex_t *M, const double *sqf, 
+                         const std::vector<double> &powers_r, 
+                         const std::vector<double> &legendre, 
+                         const std::vector<dcomplex_t> &powers_ephi) const {
+    dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+
+    for (int n = 0; n <= p; ++n) {
+      for (int m = 0; m <= n; ++m) {
+        s1 += M[midx(n, m)] * legendre[midx(n + 1, m + 1)] * powers_r[n + 1] *
+          sqf[n - m] / sqf[n + m] * powers_ephi[m + 1]; 
+      }
+
+      for (int m = 1; m <= n; ++m) {
+        s2 += M[midx(n, m)] * legendre[midx(n + 1, m - 1)] * powers_r[n + 1] *
+          sqf[n - m + 2] / sqf[n - m] * sqf[n - m + 2] / sqf[n + m] * 
+          powers_ephi[m - 1];
+      }
+    }
+
+    return s1 - conj(s2);     
+  }
+
+  // Compute (d/dx + i * d/dy) * d/dz of a multipole expansion
+  dcomplex_t gradientp0_M(int p, const dcomplex_t *M, const double *sqf,
+                          const std::vector<double> &powers_r, 
+                          const std::vector<double> &legendre, 
+                          const std::vector<dcomplex_t> &powers_ephi) const {
+    dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+
+    for (int n = 0; n <= p; ++n) {
+      for (int m = 0; m <= n; ++m) {
+        s1 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m + 1)] *
+          sqf[n - m + 1] / sqf[n - m] * sqf[n - m + 1] / sqf[n + m] * 
+          powers_ephi[m + 1]; 
+      }
+
+      for (int m = 1; m <= n; ++m) {
+        s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m - 1)] * 
+          sqf[n - m + 3] / sqf[n - m] * sqf[n - m + 3] / sqf[n + m] * 
+          powers_ephi[m - 1];
+      }
+    }
+
+    return -s1 + conj(s2); 
+  }
+
+  // Compute (d/dx + i * d/dy)^2 of a multipole expansion
+  dcomplex_t gradientpp_M(int p, const dcomplex_t *M, const double *sqf, 
+                          const std::vector<double> &powers_r, 
+                          const std::vector<double> &legendre, 
+                          const std::vector<dcomplex_t> &powers_ephi) const {
+    dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+
+    for (int n = 0; n <= p; ++n) {
+      for (int m = 0; m <= n; ++m) {
+        s1 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m + 2)] * 
+          sqf[n - m] / sqf[n + m] * powers_ephi[m + 2]; 
+      }
+    }
+
+    for (int n = 2; n <= p; ++n) {
+      for (int m = 2; m <= n; ++m) {
+        s2 += M[midx(n ,m)] * powers_r[n + 2] * legendre[midx(n + 2, m - 2)] * 
+          sqf[n - m + 4] / sqf[n - m] * sqf[n - m + 4] / sqf[n + m] *
+          powers_ephi[m - 2]; 
+      }
+    }
+
+    for (int n = 1; n <=p; ++n) {
+      // m = 1
+      
+
+
+  }
+
+  // Compute (d/dx - i * d/dy) * (d/dx + i * d/dy) of a local expansion
+  double gradientmp_M(int p, const dcomplex_t *M, const double *sqf, 
+                      const std::vector<double> &powers_r, 
+                      const std::vector<double> &legendre, 
+                      const std::vector<dcomplex_t> &powers_ephi) const {
+    dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+    
+    for (int n = 0; n <= p; ++n) {
+      s1 += M[midx(n, 0)] * powers_r[n + 2] * legendre[midx(n + 2, 0)] * 
+        (n + 1) * (n + 2); 
+
+      for (int m = 1; m <= n; ++m) {
+        s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m)] * 
+          sqf[n - m + 2] / sqf[n - m] * sqf[n - m + 2] / sqf[n + m] * 
+          powers_ephi[m]; 
+      }
+    }
+
+    return -real(s1 + 2 * s2); 
+  }
+
+  // Compute d^2/dz^2 of a multipole expansion
+  double gradient00_M(int p, const dcomplex_t *M, const double *sqf, 
+                      const std::vector<double> &powers_r, 
+                      const std::vector<double> &legendre, 
+                      const std::vector<dcomplex_t> &powers_ephi) const {
+    dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+
+    for (int n = 0; n <= p; ++n) {
+      s1 += M[midx(n, 0)] * powers_r[n + 2] * legendre[midx(n + 2, 0)] * 
+        (n + 1) * (n + 2);
+
+      for (int m = 1; m <= n; ++m) {
+        s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m)] * 
+          sqf[n - m + 2] / sqf[n - m] * sqf[n - m + 2] / sqf[n + m] * 
+          powers_ephi[m];
+      }
+    }
+
+    return real(s1 + 2 * s2); 
   }
 
   // Compute a local expansion
