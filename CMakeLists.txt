@@ -20,8 +20,7 @@ add_subdirectory(${dashmm_SOURCE_DIR} ${dashmm_BINARY_DIR})
 find_package(PkgConfig)
 pkg_search_module(HPX REQUIRED hpx)
 
-#set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/example)
 
-#add_subdirectory(src)
-#add_subdirectory(include)
+add_subdirectory(src)
+add_subdirectory(include)
 

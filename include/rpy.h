@@ -17,13 +17,14 @@ namespace dashmm {
 
 class RPYTable {
 public:
-  RPYTable(double a, double kb = 1.0, double T = 1.0, double eta = 1.0) 
+  RPYTable(double a, double kb, double T, double eta) 
     : a_{a}, kb_{kb}, T_{T}, eta_{eta} {
       c0_ = kb * T / 6 / M_PI / a / eta; 
       c1_ = kb * T / 8 / M_PI / eta; 
       c2_ = kb * T  * a * a / 12 / M_PI;
     }
-  
+
+  double a() const {return a_;}  
   double c0() const {return c0_;}
   double c1() const {return c1_;}
   double c2() const {return c2_;}
@@ -40,7 +41,8 @@ private:
 
 extern std::unique_ptr<RPYTable> rpy_table_; 
 
-void update_rpy_table(double a, double kb, double T, double eta); 
+void update_rpy_table(double a, double kb = 1.0, 
+                      double T = 1.0, double eta = 1.0); 
 
 struct Bead {
   Bead() { }
@@ -166,7 +168,8 @@ public:
   std::unique_ptr<expansion_t> S_to_L(const Source *first, 
                                       const Source *last) const {
     Point center = views_.center(); 
-    double scale = views_.center(); 
+    double scale = views_.scale(); 
+    double c1 = rpy_table_->c1();
     expansion_t *ret{new expansion_t{kTargetPrimary}}; 
     dcomplex_t *L1 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(0)); 
     dcomplex_t *L2 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(1)); 
@@ -375,8 +378,8 @@ public:
   static void update_table(int n_digits, double domain_size, 
                            const std::vector<double> &kernel_params) {
     update_laplace_table(n_digits, domain_size); 
-    update_rpy_table(kernel_params[0], kernel_parms[1], 
-                     kernel_params[2], kernel_parms[3]); 
+    update_rpy_table(kernel_params[0], kernel_params[1], 
+                     kernel_params[2], kernel_params[3]); 
   }
 
   static void delete_table() { } 
@@ -422,12 +425,9 @@ private:
     int p = builtin_laplace_table_->p();
     const double *sqf = builtin_laplace_table_->sqf();
 
-    std::vector<double> legendre((p + 2) * (p + 3) / 2); 
-    std::vector<double> powers_r(p + 2); 
-    std::vector<dcomplex_t> powers_ephi(p + 2); 
-    
-    powers_r[0] = 1.0; 
-    powers_ephi[0] = dcomplex_t{1.0, 0.0}; 
+    std::vector<double> legendre((p + 3) * (p + 4) / 2); 
+    std::vector<double> powers_r(p + 3); 
+    std::vector<dcomplex_t> powers_ephi(p + 3); 
 
     double x = t.x(); 
     double y = t.y(); 
@@ -443,96 +443,96 @@ private:
     dcomplex_t ephi = (proj / r <= 1e-14 ? dcomplex_t{1.0, 0.0} : 
                        dcomplex_t{x / proj, y / proj}); 
 
-    // Compute powers of r 
+    // Compute powers of 1 / r
+    powers_r[0] = 1.0 / r; 
     r *= scale; 
-    for (int j = 1; j <= p + 1; ++j) 
-      powers_r[j] = powers_r[j - 1] * r; 
+    for (int j = 1; j <= p + 2; ++j) 
+      powers_r[j] = powers_r[j - 1] / r; 
 
     // Compute powers of exp(i * phi)
-    for (int j = 1; j <= p + 1; ++j) 
+    powers_ephi[0] = dcomplex_t{1.0, 0.0}; 
+    for (int j = 1; j <= p + 2; ++j) 
       powers_ephi[j] = powers_ephi[j - 1] * ephi; 
 
     // Compute value of the Legendre polynomial
-    legendre_Plm(p + 1, ctheta, legendre.data()); 
+    legendre_Plm(p + 2, ctheta, legendre.data()); 
 
-    // Process L1
+    // Process M1
     {
-      auto s1 = eval_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
+      auto s1 = eval_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
       retval[0] += c1 * s1; 
 
-      auto s2 = gradient0_L(p, L1, sqf, powers_r, legendre, powers_ephi);
-      retval[2] -= c1 * x * s2 * scale; 
+      auto s2 = gradient0_M(p, M1, sqf, powers_r, legendre, powers_ephi);
+      retval[2] -= c1 * x * s2 / scale; 
 
-      auto s3 = gradientp_L(p, L1, sqf, powers_r, legendre, powers_ephi);
-      retval[0] -= c1 * x * real(s3) * scale; 
-      retval[1] -= c1 * x * imag(s3) * scale; 
+      auto s3 = gradientp_M(p, M1, sqf, powers_r, legendre, powers_ephi);
+      retval[0] -= c1 * x * real(s3) / scale; 
+      retval[1] -= c1 * x * imag(s3) / scale; 
       
-      auto s4 = gradientp0_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
-      retval[2] += c2 * real(s4) * scale2; 
+      auto s4 = gradientp0_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] += c2 * real(s4) / scale2; 
 
-      auto s5 = gradientpp_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
-      auto s6 = gradientmp_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
+      auto s5 = gradientpp_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
+      auto s6 = gradientmp_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
 
-      retval[0] += c2 * real(s5 + s6) / 2 * scale2; 
-      retval[1] += c2 * imag(s5) / 2 * scale2; 
+      retval[0] += c2 * real(s5 + s6) / 2 / scale2; 
+      retval[1] += c2 * imag(s5) / 2 / scale2; 
     }
 
-    // Process L2 
+    // Process M2
     {
-      auto s1 = eval_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
+      auto s1 = eval_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
       retval[1] += c1 * s1; 
 
-      auto s2 = gradient0_L(p, L2, sqf, powers_r, legendre, powers_ephi);
-      retval[2] -= c1 * y * s2 * scale; 
+      auto s2 = gradient0_M(p, M2, sqf, powers_r, legendre, powers_ephi);
+      retval[2] -= c1 * y * s2 / scale; 
 
-      auto s3 = gradientp_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
-      retval[0] -= c1 * y * real(s3) * scale; 
-      retval[1] -= c1 * y * imag(s3) * scale;
+      auto s3 = gradientp_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
+      retval[0] -= c1 * y * real(s3) / scale; 
+      retval[1] -= c1 * y * imag(s3) / scale;
 
-      auto s4 = gradientp0_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
-      retval[2] += c2 * imag(s4) * scale; 
+      auto s4 = gradientp0_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] += c2 * imag(s4) / scale2; 
 
-      auto s5 = gradientpp_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
-      auto s6 = gradientmp_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
+      auto s5 = gradientpp_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
+      auto s6 = gradientmp_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
 
-      retval[0] += c2 * imag(s5) / 2 * scale2; 
-      retval[1] += c2 * real(s6 - s5) / 2 * scale2; 
+      retval[0] += c2 * imag(s5) / 2 / scale2; 
+      retval[1] += c2 * real(s6 - s5) / 2 / scale2; 
     }
 
-    // Process L3 
+    // Process M3 
     {
-      auto s1 = eval_L(p, L3, sqf, powers_r, legendre, powers_ephi); 
+      auto s1 = eval_M(p, M3, sqf, powers_r, legendre, powers_ephi); 
       retval[2] += c1 * s1; 
 
-      auto s2 = gradient0_L(p, L3, sqf, powers_r, legendre, powers_ephi); 
-      retval[2] -= c1 * z * s2 * scale; 
+      auto s2 = gradient0_M(p, M3, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] -= c1 * z * s2 / scale; 
 
-      auto s3 = gradientp_L(p, L3, sqf, powers_r, legendre, powers_ephi); 
-      retval[0] -= c1 * z * real(s3) * scale; 
-      retval[1] -= c1 * z * imag(s3) * scale; 
+      auto s3 = gradientp_M(p, M3, sqf, powers_r, legendre, powers_ephi); 
+      retval[0] -= c1 * z * real(s3) / scale; 
+      retval[1] -= c1 * z * imag(s3) / scale; 
 
-      auto s4 = gradientp0_L(p, L3, sqf, powers_r, legendre, powers_ephi);
-      retval[0] += c2 * real(s4) * scale2;
-      retval[1] += c2 * imag(s4) * scale2; 
+      auto s4 = gradientp0_M(p, M3, sqf, powers_r, legendre, powers_ephi);
+      retval[0] += c2 * real(s4) / scale2;
+      retval[1] += c2 * imag(s4) / scale2; 
 
-      auto s5 = gradient00_L(p, L3, sqf, powers_r, legendre, powers_ephi); 
-      retval[2] += c2 * s5 * scale2;
+      auto s5 = gradient00_M(p, M3, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] += c2 * s5 / scale2;
     }
 
     // Process L4 
     {
-      auto s1 = gradient0_L(p, L4, sqf, powers_r, legendre, powers_ephi); 
-      retval[2] += s1 * scale; 
+      auto s1 = gradient0_M(p, M4, sqf, powers_r, legendre, powers_ephi); 
+      retval[2] += s1 / scale; 
 
-      auto s2 = gradientp_L(p, L4, sqf, powers_r, legendre, powers_ephi); 
-      retval[0] += real(s2) * scale; 
-      retval[1] += imag(s2) * scale;
+      auto s2 = gradientp_M(p, M4, sqf, powers_r, legendre, powers_ephi); 
+      retval[0] += real(s2) / scale; 
+      retval[1] += imag(s2) / scale;
     }
         
     return retval; 
   }
-
-
 
   std::vector<double> rpy_l_to_t(Point t, double scale, 
                                  const dcomplex_t *L1, 
@@ -614,7 +614,7 @@ private:
       retval[1] -= c1 * y * imag(s3) * scale;
 
       auto s4 = gradientp0_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
-      retval[2] += c2 * imag(s4) * scale; 
+      retval[2] += c2 * imag(s4) * scale2; 
 
       auto s5 = gradientpp_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
       auto s6 = gradientmp_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
@@ -684,7 +684,7 @@ private:
     dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
 
     for (int n = 0; n <= p; ++n) 
-      s1 += M[midx(n, 0)] * (n + 1) * legendre[midx(n + 1, 0)] * 
+      s1 += M[midx(n, 0)] * ((double) (n + 1)) * legendre[midx(n + 1, 0)] * 
         powers_r[n + 1]; 
 
     for (int n = 1; n <= p; ++n) {
@@ -695,7 +695,7 @@ private:
       }
     }
       
-    return -real(s1 + 2 * s2); 
+    return -real(s1 + 2.0 * s2); 
   }
 
   // Compute d/dx + i * d/dy of a multipole expansion
@@ -769,7 +769,7 @@ private:
 
     for (int n = 1; n <=p; ++n) {
       // m = 1
-      s2 -= M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, 1)] * 
+      s2 -= M[midx(n, 1)] * powers_r[n + 2] * legendre[midx(n + 2, 1)] * 
         sqf[n + 3] / sqf[n - 1] * sqf[n + 3] / sqf[n + 1] * 
         conj(powers_ephi[1]); 
     }
@@ -786,7 +786,7 @@ private:
     
     for (int n = 0; n <= p; ++n) {
       s1 += M[midx(n, 0)] * powers_r[n + 2] * legendre[midx(n + 2, 0)] * 
-        (n + 1) * (n + 2); 
+        ((double) (n + 1) * (n + 2)); 
 
       for (int m = 1; m <= n; ++m) {
         s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m)] * 
@@ -795,7 +795,7 @@ private:
       }
     }
 
-    return -real(s1 + 2 * s2); 
+    return -real(s1 + 2.0 * s2); 
   }
 
   // Compute d^2/dz^2 of a multipole expansion
@@ -807,7 +807,7 @@ private:
 
     for (int n = 0; n <= p; ++n) {
       s1 += M[midx(n, 0)] * powers_r[n + 2] * legendre[midx(n + 2, 0)] * 
-        (n + 1) * (n + 2);
+        ((double) (n + 1) * (n + 2));
 
       for (int m = 1; m <= n; ++m) {
         s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m)] * 
@@ -816,7 +816,7 @@ private:
       }
     }
 
-    return real(s1 + 2 * s2); 
+    return real(s1 + 2.0 * s2); 
   }
 
   // Compute a local expansion
@@ -849,19 +849,17 @@ private:
     dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
 
     for (int n = 1; n <= p; ++n) {
-      s1 += L[midx(n, 0)] * n * powers_r[n - 1] * legendre[midx(n - 1, 0)]; 
+      s1 += L[midx(n, 0)] * ((double) n) * powers_r[n - 1] * 
+        legendre[midx(n - 1, 0)]; 
 
       for (int m = 1; m <= n - 1; ++m) {
         s2 += L[midx(n, m)] * powers_r[n - 1] * legendre[midx(n - 1, m)] * 
           sqf[n + m] / sqf[n + m - 1] * sqf[n - m] / sqf[n + m - 1] * 
           powers_ephi[m]; 
-
-        // Simplified from 
-        // sqrt((n + m) * (n - m)) * sqf[n - 1 - m] / sqf[n - 1 + m]
       }
     }
 
-    return real(s1 + 2 * s2);
+    return real(s1 + 2.0 * s2);
   }
 
   // Compute d/dx + i * d/dy of a local expansion
@@ -875,22 +873,14 @@ private:
       for (int m = 0; m <= n - 2; ++m) {
         s1 += L[midx(n, m)] * powers_r[n - 1] * legendre[midx(n - 1, m + 1)] *
           sqf[n - m] / sqf[n + m] * powers_ephi[m + 1]; 
-
-        // Simplified from 
-        // sqrt((n - m) * (n - m - 1)) * 
-        // sqf[n - 1 - (m + 1)] / sqf[n - 1 + m + 1]
       }
     }
 
-    for (int n = 1; n <= p ++n) {
+    for (int n = 1; n <= p; ++n) {
       for (int m = 1; m <= n; ++m) {
         s2 += L[midx(n, m)] * powers_r[n - 1] * legendre[midx(n - 1, m - 1)] *
           sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2] * 
           powers_ephi[m - 1]; 
-
-        // Simplified from 
-        // sqrt((n + m) * (n + m - 1)) * sqf[n - 1 - (m - 1)] / 
-        // sqf[n - 1 + m - 1]
       }
     }
 
@@ -910,10 +900,6 @@ private:
         s1 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m + 1)] * 
           sqf[n - m] / sqf[n + m - 1] * sqf[n + m] / sqf[n + m - 1] * 
           powers_ephi[m + 1]; 
-
-        // Simplified from 
-        // sqrt((n + m) * (n - m) * (n - m - 1) * (n - m - 2)) * 
-        // sqf[n - 2 - (m + 1)] / sqf[n - 2 + (m + 1)] 
       }
     }
 
@@ -922,10 +908,6 @@ private:
         s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m - 1)] * 
           sqf[n - m] / sqf[n + m - 3] * sqf[n + m] / sqf[n + m - 3] * 
           powers_ephi[m + 1]; 
-
-        // Simplified from
-        // sqrt((n + m) * (n - m) * (n + m - 1) * (n + m - 2)) * 
-        // sqf[n - 2 - (m - 1)] / sqf[n - 2 + (m - 1)]
       }
     }
 
@@ -941,24 +923,16 @@ private:
 
     for (int n = 4; n <= p; ++n) {
       for (int m = 0; m <= n - 4; ++m) {
-        s1 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m + 1)] 
-          * sqf[n - m] / sqf[n + m] * powers_ephi[m + 2]; 
-
-        // Simplified from 
-        // sqrt((n - m)) * (n - m - 1) * (n - m - 2) * (n - m - 3)) * 
-        // sqf[n - 2 - (m + 2)] / sqf[n - 2 + (m + 2)]
+        s1 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m + 1)] *
+          sqf[n - m] / sqf[n + m] * powers_ephi[m + 2]; 
       }
     }
 
     for (int n = 2; n <= p; ++n) {
       for (int m = 2; m <= n; ++m) {
         s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m - 2)] * 
-          * sqf[n + m] / sqf[n + m - 4] * sqf[n - m] / sqf[n + m - 4] 
-          * powers_ephi[m - 2]; 
-
-        // Simplified from 
-        // sqrt((n + m) * (n + m - 1) * (n + m - 2) * (n + m - 3)) * 
-        // sqf[n - 2 - (m - 2)] / sqf[n - 2 + (m - 2)]
+          sqf[n + m] / sqf[n + m - 4] * sqf[n - m] / sqf[n + m - 4] *
+          powers_ephi[m - 2]; 
       }
     }
 
@@ -973,21 +947,17 @@ private:
     dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
     
     for (int n = 2; n <= p; ++n) {
-      s1 -= L[midx(n, 0)] * n * (n - 1) * powers_r[n - 2] * 
+      s1 -= L[midx(n, 0)] * ((double) n * (n - 1)) * powers_r[n - 2] * 
         legendre[midx(n - 2, 0)]; 
 
       for (int m = 1; m <= n; ++m) {
         s2 -= L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m)] * 
           sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2] *
           powers_ephi[m]; 
-
-        // Simplified from 
-        // sqrt((n - m) * (n - m - 1) * (n + m) * (n + m - 1)) * 
-        // sqf[n - 2 - m] / sqf[n - 2 + m]
       }
     }
 
-    return real(s3) + 2 * real(s4);
+    return real(s1 + 2.0 * s2);
   }
 
   // Compute d^2/dz^2 of a local expansion
@@ -998,20 +968,16 @@ private:
     dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
 
     for (int n = 2; n <= p; ++n) {
-      s1 += L3[midx(n, 0)] * n * (n - 1) * legendre[midx(n - 2, 0)] * 
+      s1 += L[midx(n, 0)] * ((double) n * (n - 1)) * legendre[midx(n - 2, 0)] * 
         powers_r[n - 2]; 
 
       for (int m = 1; m <= n - 2; ++m) {
         s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m)] * 
           sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2]; 
-
-        // Simplified from 
-        // sqrt((n + m) * (n - m) * (n - 1 + m) * (n - 1 - m)) * 
-        // sqf[n - 2 - m] / sqf[n - 2 + m]
       }
     }
 
-    return real(s1) + 2 * real(s2); 
+    return real(s1 + 2.0 * s2); 
   }
 
 };    
