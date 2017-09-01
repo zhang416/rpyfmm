@@ -769,9 +769,12 @@ private:
 
     for (int n = 1; n <=p; ++n) {
       // m = 1
-      
-
-
+      s2 -= M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, 1)] * 
+        sqf[n + 3] / sqf[n - 1] * sqf[n + 3] / sqf[n + 1] * 
+        conj(powers_ephi[1]); 
+    }
+    
+    return s1 + conj(s2); 
   }
 
   // Compute (d/dx - i * d/dy) * (d/dx + i * d/dy) of a local expansion
