@@ -15,12 +15,165 @@ void update_rpy_table(double a, double kb, double T, double eta) {
   }
 }
 
+// Compute a multipole expansion
+double eval_M(int p, const dcomplex_t *M, const double *sqf, 
+              const double *powers_r, const double *legendre,
+              const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}; 
+  
+  for (int n = 0; n <= p; ++n) 
+    s1 += M[midx(n, 0)] * powers_r[n] * legendre[midx(n, 0)]; 
+  
+  for (int n = 1; n <= p; ++n) {
+    for (int m = 1; m <= n; ++m) {
+      s1 += 2.0 * real(M[midx(n, m)]) * powers_ephi[m] * 
+        powers_r[n] * legendre[midx(n, m)] * sqf[n - m] / sqf[n + m];
+    }
+  }
+  
+  return real(s1); 
+}
 
-std::vector<double> RPY::rpy_m_to_t(Point t, double scale, 
-                                    const dcomplex_t *M1, 
-                                    const dcomplex_t *M2, 
-                                    const dcomplex_t *M3, 
-                                    const dcomplex_t *M4) const {
+// Compute d/dz of a multipole expansion
+double gradient0_M(int p, const dcomplex_t *M, const double *sqf, 
+                   const double *powers_r, const double *legendre,
+                   const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 0; n <= p; ++n) 
+    s1 += M[midx(n, 0)] * ((double) (n + 1)) * legendre[midx(n + 1, 0)] * 
+      powers_r[n + 1]; 
+  
+  for (int n = 1; n <= p; ++n) {
+    for (int m = 1; m <= n; ++m) {
+      s2 += M[midx(n, m)] * powers_r[n + 1] * legendre[midx(n + 1, m)] * 
+        sqf[n - m + 1] / sqf[n - m] * sqf[n - m + 1] / sqf[n + m] * 
+        powers_ephi[m]; 
+    }
+  }
+  
+  return -real(s1 + 2.0 * s2); 
+}
+
+// Compute d/dx + i * d/dy of a multipole expansion
+dcomplex_t gradientp_M(int p, const dcomplex_t *M, const double *sqf, 
+                       const double *powers_r, const double *legendre,
+                       const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 0; n <= p; ++n) {
+    for (int m = 0; m <= n; ++m) {
+      s1 += M[midx(n, m)] * legendre[midx(n + 1, m + 1)] * powers_r[n + 1] *
+        sqf[n - m] / sqf[n + m] * powers_ephi[m + 1]; 
+    }
+    
+    for (int m = 1; m <= n; ++m) {
+      s2 += M[midx(n, m)] * legendre[midx(n + 1, m - 1)] * powers_r[n + 1] *
+        sqf[n - m + 2] / sqf[n - m] * sqf[n - m + 2] / sqf[n + m] * 
+        powers_ephi[m - 1];
+    }
+  }
+
+  return s1 - conj(s2);     
+}
+
+// Compute (d/dx + i * d/dy) * d/dz of a multipole expansion
+dcomplex_t gradientp0_M(int p, const dcomplex_t *M, const double *sqf,
+                        const double *powers_r, const double *legendre,
+                        const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 0; n <= p; ++n) {
+    for (int m = 0; m <= n; ++m) {
+      s1 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m + 1)] *
+        sqf[n - m + 1] / sqf[n - m] * sqf[n - m + 1] / sqf[n + m] * 
+        powers_ephi[m + 1]; 
+    }
+    
+    for (int m = 1; m <= n; ++m) {
+      s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m - 1)] * 
+        sqf[n - m + 3] / sqf[n - m] * sqf[n - m + 3] / sqf[n + m] * 
+        powers_ephi[m - 1];
+    }
+  }
+  
+  return -s1 + conj(s2); 
+}
+
+// Compute (d/dx + i * d/dy)^2 of a multipole expansion
+dcomplex_t gradientpp_M(int p, const dcomplex_t *M, const double *sqf, 
+                        const double *powers_r, const double *legendre,
+                        const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 0; n <= p; ++n) {
+    for (int m = 0; m <= n; ++m) {
+      s1 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m + 2)] * 
+        sqf[n - m] / sqf[n + m] * powers_ephi[m + 2]; 
+    }
+  }
+
+  for (int n = 2; n <= p; ++n) {
+    for (int m = 2; m <= n; ++m) {
+      s2 += M[midx(n ,m)] * powers_r[n + 2] * legendre[midx(n + 2, m - 2)] * 
+        sqf[n - m + 4] / sqf[n - m] * sqf[n - m + 4] / sqf[n + m] *
+        powers_ephi[m - 2]; 
+    }
+  }
+  
+  for (int n = 1; n <=p; ++n) {
+    // m = 1
+    s2 -= M[midx(n, 1)] * powers_r[n + 2] * legendre[midx(n + 2, 1)] * 
+      sqf[n + 3] / sqf[n - 1] * sqf[n + 3] / sqf[n + 1] * 
+      conj(powers_ephi[1]); 
+  }
+  
+  return s1 + conj(s2); 
+}
+
+// Compute (d/dx - i * d/dy) * (d/dx + i * d/dy) of a local expansion
+double gradientmp_M(int p, const dcomplex_t *M, const double *sqf, 
+                    const double *powers_r, const double *legendre,
+                    const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 0; n <= p; ++n) {
+    s1 += M[midx(n, 0)] * powers_r[n + 2] * legendre[midx(n + 2, 0)] * 
+      ((double) (n + 1) * (n + 2)); 
+    
+    for (int m = 1; m <= n; ++m) {
+      s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m)] * 
+        sqf[n - m + 2] / sqf[n - m] * sqf[n - m + 2] / sqf[n + m] * 
+        powers_ephi[m]; 
+    }
+  }
+  
+  return -real(s1 + 2.0 * s2); 
+}
+
+// Compute d^2/dz^2 of a multipole expansion
+double gradient00_M(int p, const dcomplex_t *M, const double *sqf, 
+                    const double *powers_r, const double *legendre,
+                    const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 0; n <= p; ++n) {
+    s1 += M[midx(n, 0)] * powers_r[n + 2] * legendre[midx(n + 2, 0)] * 
+      ((double) (n + 1) * (n + 2));
+    
+    for (int m = 1; m <= n; ++m) {
+      s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m)] * 
+        sqf[n - m + 2] / sqf[n - m] * sqf[n - m + 2] / sqf[n + m] * 
+        powers_ephi[m];
+    }
+  }
+  
+  return real(s1 + 2.0 * s2); 
+}
+
+std::vector<double> rpy_m_to_t(Point t, double scale, 
+                               const dcomplex_t *M1, const dcomplex_t *M2, 
+                               const dcomplex_t *M3, const dcomplex_t *M4) {
   std::vector<double> retval(3, 0.0); 
   
   double c1 = rpy_table_->c1(); 
@@ -31,9 +184,6 @@ std::vector<double> RPY::rpy_m_to_t(Point t, double scale,
   double *legendre = new double[(p + 3) * (p + 4) / 2]; 
   double *powers_r = new double[p + 3]; 
   dcomplex_t *powers_ephi = new dcomplex_t[p + 3]; 
-  //std::vector<double> legendre((p + 3) * (p + 4) / 2); 
-  //std::vector<double> powers_r(p + 3); 
-  //std::vector<dcomplex_t> powers_ephi(p + 3); 
   
   double x = t.x(); 
   double y = t.y(); 
@@ -61,7 +211,7 @@ std::vector<double> RPY::rpy_m_to_t(Point t, double scale,
     powers_ephi[j] = powers_ephi[j - 1] * ephi; 
   
   // Compute value of the Legendre polynomial
-  legendre_Plm(p + 2, ctheta, legendre.data()); 
+  legendre_Plm(p + 2, ctheta, legendre); 
   
   // Process M1
   {
@@ -144,11 +294,164 @@ std::vector<double> RPY::rpy_m_to_t(Point t, double scale,
   return retval; 
 }
 
-std::vector<double> RPY::rpy_l_to_t(Point t, double scale, 
-                                    const dcomplex_t *L1, 
-                                    const dcomplex_t *L2, 
-                                    const dcomplex_t *L3, 
-                                    const dcomplex_t *L4) const {
+
+// Compute a local expansion
+double eval_L(int p, const dcomplex_t *L, const double *sqf, 
+              const double *powers_r, const double *legendre,
+              const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}; 
+  
+  for (int n = 0; n <= p; ++n) {
+    s1 += L[midx(n, 0)] * powers_r[n] * legendre[midx(n, 0)]; 
+  }
+  
+  for (int n = 1; n <= p; ++n) {
+    for (int m = 1; m <= n; ++m) {
+      s1 += 2.0 * real(L[midx(n, m)]) * powers_ephi[m] * 
+        powers_r[n] * legendre[midx(n, m)] * sqf[n - m] / sqf[n + m];
+    }
+  }
+  
+  return real(s1);
+}
+
+
+// Compute d/dz of a local expansion
+double gradient0_L(int p, const dcomplex_t *L, const double *sqf, 
+                   const double *powers_r, const double *legendre,
+                   const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 1; n <= p; ++n) {
+    s1 += L[midx(n, 0)] * ((double) n) * powers_r[n - 1] * 
+      legendre[midx(n - 1, 0)]; 
+    
+    for (int m = 1; m <= n - 1; ++m) {
+      s2 += L[midx(n, m)] * powers_r[n - 1] * legendre[midx(n - 1, m)] * 
+        sqf[n + m] / sqf[n + m - 1] * sqf[n - m] / sqf[n + m - 1] * 
+        powers_ephi[m]; 
+    }
+  }
+  
+  return real(s1 + 2.0 * s2);
+}
+
+// Compute d/dx + i * d/dy of a local expansion
+dcomplex_t gradientp_L(int p, const dcomplex_t *L, const double *sqf,
+                       const double *powers_r, const double *legendre,
+                       const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 2; n <= p; ++n) {
+    for (int m = 0; m <= n - 2; ++m) {
+      s1 += L[midx(n, m)] * powers_r[n - 1] * legendre[midx(n - 1, m + 1)] *
+        sqf[n - m] / sqf[n + m] * powers_ephi[m + 1]; 
+    }
+  }
+  
+  for (int n = 1; n <= p; ++n) {
+    for (int m = 1; m <= n; ++m) {
+      s2 += L[midx(n, m)] * powers_r[n - 1] * legendre[midx(n - 1, m - 1)] *
+        sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2] * 
+        powers_ephi[m - 1]; 
+    }
+  }
+  
+  return s1 - conj(s2); 
+}
+
+
+// Compute (d/dx + i * d/dy) * d/dz of a local expansion
+dcomplex_t gradientp0_L(int p, const dcomplex_t *L, const double *sqf,
+                        const double *powers_r, const double *legendre,
+                        const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 3; n <= p; ++n) {
+    for (int m = 0; m <= n - 3; ++m) {
+      s1 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m + 1)] * 
+        sqf[n - m] / sqf[n + m - 1] * sqf[n + m] / sqf[n + m - 1] * 
+        powers_ephi[m + 1]; 
+    }
+  }
+  
+  for (int n = 2; n <= p; ++n) {
+    for (int m = 1; m <= n; ++m) {
+      s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m - 1)] * 
+        sqf[n - m] / sqf[n + m - 3] * sqf[n + m] / sqf[n + m - 3] * 
+        powers_ephi[m + 1]; 
+    }
+  }
+  
+  return s1 - conj(s2); 
+}
+
+// Compute (d/dx + i * d/dy)^2 of a local expansion
+dcomplex_t gradientpp_L(int p, const dcomplex_t *L, const double *sqf, 
+                        const double *powers_r, const double *legendre,
+                        const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 4; n <= p; ++n) {
+    for (int m = 0; m <= n - 4; ++m) {
+      s1 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m + 1)] *
+        sqf[n - m] / sqf[n + m] * powers_ephi[m + 2]; 
+    }
+  }
+  
+  for (int n = 2; n <= p; ++n) {
+    for (int m = 2; m <= n; ++m) {
+      s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m - 2)] * 
+        sqf[n + m] / sqf[n + m - 4] * sqf[n - m] / sqf[n + m - 4] *
+        powers_ephi[m - 2]; 
+    }
+  }
+  
+  return s1 + conj(s2); 
+}
+
+// Compute (d/dx - i * d/dy) * (d/dx + i * d/dy) of a local expansion
+double gradientmp_L(int p, const dcomplex_t *L, const double *sqf, 
+                    const double *powers_r, const double *legendre, 
+                    const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 2; n <= p; ++n) {
+    s1 -= L[midx(n, 0)] * ((double) n * (n - 1)) * powers_r[n - 2] * 
+      legendre[midx(n - 2, 0)]; 
+    
+    for (int m = 1; m <= n; ++m) {
+      s2 -= L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m)] * 
+        sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2] *
+        powers_ephi[m]; 
+    }
+  }
+  
+  return real(s1 + 2.0 * s2);
+}
+
+// Compute d^2/dz^2 of a local expansion
+double gradient00_L(int p, const dcomplex_t *L, const double *sqf, 
+                    const double *powers_r, const double *legendre, 
+                    const dcomplex_t *powers_ephi) {
+  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
+  
+  for (int n = 2; n <= p; ++n) {
+    s1 += L[midx(n, 0)] * ((double) n * (n - 1)) * legendre[midx(n - 2, 0)] * 
+        powers_r[n - 2]; 
+    
+    for (int m = 1; m <= n - 2; ++m) {
+      s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m)] * 
+        sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2]; 
+    }
+  }
+  
+  return real(s1 + 2.0 * s2); 
+}
+
+std::vector<double> rpy_l_to_t(Point t, double scale, 
+                               const dcomplex_t *L1, const dcomplex_t *L2,
+                               const dcomplex_t *L3, const dcomplex_t *L4) {
   std::vector<double> retval(3, 0.0); 
   
   double c1 = rpy_table_->c1(); 
@@ -156,9 +459,6 @@ std::vector<double> RPY::rpy_l_to_t(Point t, double scale,
   int p = builtin_laplace_table_->p();
   const double *sqf = builtin_laplace_table_->sqf();
   
-  //std::vector<double> legendre((p + 2) * (p + 3) / 2); 
-  //std::vector<double> powers_r(p + 2); 
-  //std::vector<dcomplex_t> powers_ephi(p + 2); 
   double *legendre = new double[(p + 2) * (p + 3) / 2]; 
   double *powers_r = new double[p + 2]; 
   dcomplex_t *powers_ephi = new dcomplex_t[p + 2]; 
@@ -190,7 +490,7 @@ std::vector<double> RPY::rpy_l_to_t(Point t, double scale,
     powers_ephi[j] = powers_ephi[j - 1] * ephi; 
   
   // Compute value of the Legendre polynomial
-  legendre_Plm(p + 1, ctheta, legendre.data()); 
+  legendre_Plm(p + 1, ctheta, legendre); 
   
   // Process L1
   {
@@ -273,315 +573,4 @@ std::vector<double> RPY::rpy_l_to_t(Point t, double scale,
   return retval; 
 }
   
-// Compute a multipole expansion
-double RPY::eval_M(int p, const dcomplex_t *M, const double *sqf, 
-                   const double *powers_r, const double *legendre,
-                   const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}; 
-  
-  for (int n = 0; n <= p; ++n) 
-    s1 += M[midx(n, 0)] * powers_r[n] * legendre[midx(n, 0)]; 
-  
-  for (int n = 1; n <= p; ++n) {
-    for (int m = 1; m <= n; ++m) {
-      s1 += 2.0 * real(M[midx(n, m)]) * powers_ephi[m] * 
-        powers_r[n] * legendre[midx(n, m)] * sqf[n - m] / sqf[n + m];
-    }
-  }
-  
-  return real(s1); 
-}
-
-// Compute d/dz of a multipole expansion
-double RPY::gradient0_M(int p, const dcomplex_t *M, const double *sqf, 
-                        const double *powers_r, const double *legendre,
-                        const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 0; n <= p; ++n) 
-    s1 += M[midx(n, 0)] * ((double) (n + 1)) * legendre[midx(n + 1, 0)] * 
-      powers_r[n + 1]; 
-  
-  for (int n = 1; n <= p; ++n) {
-    for (int m = 1; m <= n; ++m) {
-      s2 += M[midx(n, m)] * powers_r[n + 1] * legendre[midx(n + 1, m)] * 
-        sqf[n - m + 1] / sqf[n - m] * sqf[n - m + 1] / sqf[n + m] * 
-        powers_ephi[m]; 
-    }
-  }
-  
-  return -real(s1 + 2.0 * s2); 
-}
-
-// Compute d/dx + i * d/dy of a multipole expansion
-dcomplex_t RPY::gradientp_M(int p, const dcomplex_t *M, const double *sqf, 
-                            const double *powers_r, const double *legendre,
-                            const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 0; n <= p; ++n) {
-    for (int m = 0; m <= n; ++m) {
-      s1 += M[midx(n, m)] * legendre[midx(n + 1, m + 1)] * powers_r[n + 1] *
-        sqf[n - m] / sqf[n + m] * powers_ephi[m + 1]; 
-    }
-    
-    for (int m = 1; m <= n; ++m) {
-      s2 += M[midx(n, m)] * legendre[midx(n + 1, m - 1)] * powers_r[n + 1] *
-        sqf[n - m + 2] / sqf[n - m] * sqf[n - m + 2] / sqf[n + m] * 
-        powers_ephi[m - 1];
-    }
-  }
-
-  return s1 - conj(s2);     
-}
-
-// Compute (d/dx + i * d/dy) * d/dz of a multipole expansion
-dcomplex_t RPY::gradientp0_M(int p, const dcomplex_t *M, const double *sqf,
-                             const double *powers_r, const double *legendre,
-                             const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 0; n <= p; ++n) {
-    for (int m = 0; m <= n; ++m) {
-      s1 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m + 1)] *
-        sqf[n - m + 1] / sqf[n - m] * sqf[n - m + 1] / sqf[n + m] * 
-        powers_ephi[m + 1]; 
-    }
-    
-    for (int m = 1; m <= n; ++m) {
-      s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m - 1)] * 
-        sqf[n - m + 3] / sqf[n - m] * sqf[n - m + 3] / sqf[n + m] * 
-        powers_ephi[m - 1];
-    }
-  }
-  
-  return -s1 + conj(s2); 
-}
-
-// Compute (d/dx + i * d/dy)^2 of a multipole expansion
-dcomplex_t RPY::gradientpp_M(int p, const dcomplex_t *M, const double *sqf, 
-                             const double *powers_r, const double *legendre,
-                             const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 0; n <= p; ++n) {
-    for (int m = 0; m <= n; ++m) {
-      s1 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m + 2)] * 
-        sqf[n - m] / sqf[n + m] * powers_ephi[m + 2]; 
-    }
-  }
-
-  for (int n = 2; n <= p; ++n) {
-    for (int m = 2; m <= n; ++m) {
-      s2 += M[midx(n ,m)] * powers_r[n + 2] * legendre[midx(n + 2, m - 2)] * 
-        sqf[n - m + 4] / sqf[n - m] * sqf[n - m + 4] / sqf[n + m] *
-        powers_ephi[m - 2]; 
-    }
-  }
-  
-  for (int n = 1; n <=p; ++n) {
-    // m = 1
-    s2 -= M[midx(n, 1)] * powers_r[n + 2] * legendre[midx(n + 2, 1)] * 
-      sqf[n + 3] / sqf[n - 1] * sqf[n + 3] / sqf[n + 1] * 
-      conj(powers_ephi[1]); 
-  }
-  
-  return s1 + conj(s2); 
-}
-
-// Compute (d/dx - i * d/dy) * (d/dx + i * d/dy) of a local expansion
-double RPY::gradientmp_M(int p, const dcomplex_t *M, const double *sqf, 
-                         const double *powers_r, const double *legendre,
-                         const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 0; n <= p; ++n) {
-    s1 += M[midx(n, 0)] * powers_r[n + 2] * legendre[midx(n + 2, 0)] * 
-      ((double) (n + 1) * (n + 2)); 
-    
-    for (int m = 1; m <= n; ++m) {
-      s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m)] * 
-        sqf[n - m + 2] / sqf[n - m] * sqf[n - m + 2] / sqf[n + m] * 
-        powers_ephi[m]; 
-    }
-  }
-  
-  return -real(s1 + 2.0 * s2); 
-}
-
-// Compute d^2/dz^2 of a multipole expansion
-double RPY::gradient00_M(int p, const dcomplex_t *M, const double *sqf, 
-                         const double *powers_r, const double *legendre,
-                         const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 0; n <= p; ++n) {
-    s1 += M[midx(n, 0)] * powers_r[n + 2] * legendre[midx(n + 2, 0)] * 
-      ((double) (n + 1) * (n + 2));
-    
-    for (int m = 1; m <= n; ++m) {
-      s2 += M[midx(n, m)] * powers_r[n + 2] * legendre[midx(n + 2, m)] * 
-        sqf[n - m + 2] / sqf[n - m] * sqf[n - m + 2] / sqf[n + m] * 
-        powers_ephi[m];
-    }
-  }
-  
-  return real(s1 + 2.0 * s2); 
-}
-
-// Compute a local expansion
-double RPY::eval_L(int p, const dcomplex_t *L, const double *sqf, 
-                   const double *powers_r, const double *legendre,
-                   const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}; 
-  
-  for (int n = 0; n <= p; ++n) {
-    s1 += L[midx(n, 0)] * powers_r[n] * legendre[midx(n, 0)]; 
-  }
-  
-  for (int n = 1; n <= p; ++n) {
-    for (int m = 1; m <= n; ++m) {
-      s1 += 2.0 * real(L[midx(n, m)]) * powers_ephi[m] * 
-        powers_r[n] * legendre[midx(n, m)] * sqf[n - m] / sqf[n + m];
-    }
-  }
-  
-  return real(s1);
-}
-
-
-// Compute d/dz of a local expansion
-double RPY::gradient0_L(int p, const dcomplex_t *L, const double *sqf, 
-                        const double *powers_r, const double *legendre,
-                        const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 1; n <= p; ++n) {
-    s1 += L[midx(n, 0)] * ((double) n) * powers_r[n - 1] * 
-      legendre[midx(n - 1, 0)]; 
-    
-    for (int m = 1; m <= n - 1; ++m) {
-      s2 += L[midx(n, m)] * powers_r[n - 1] * legendre[midx(n - 1, m)] * 
-        sqf[n + m] / sqf[n + m - 1] * sqf[n - m] / sqf[n + m - 1] * 
-        powers_ephi[m]; 
-    }
-  }
-  
-  return real(s1 + 2.0 * s2);
-}
-
-// Compute d/dx + i * d/dy of a local expansion
-dcomplex_t gradientp_L(int p, const dcomplex_t *L, const double *sqf,
-                       const double *powers_r, const double *legendre,
-                       const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 2; n <= p; ++n) {
-    for (int m = 0; m <= n - 2; ++m) {
-      s1 += L[midx(n, m)] * powers_r[n - 1] * legendre[midx(n - 1, m + 1)] *
-        sqf[n - m] / sqf[n + m] * powers_ephi[m + 1]; 
-    }
-  }
-  
-  for (int n = 1; n <= p; ++n) {
-    for (int m = 1; m <= n; ++m) {
-      s2 += L[midx(n, m)] * powers_r[n - 1] * legendre[midx(n - 1, m - 1)] *
-        sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2] * 
-        powers_ephi[m - 1]; 
-    }
-  }
-  
-  return s1 - conj(s2); 
-}
-
-
-// Compute (d/dx + i * d/dy) * d/dz of a local expansion
-dcomplex_t RPY::gradientp0_L(int p, const dcomplex_t *L, const double *sqf,
-                             const double *powers_r, const double *legendre,
-                             const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 3; n <= p; ++n) {
-    for (int m = 0; m <= n - 3; ++m) {
-      s1 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m + 1)] * 
-        sqf[n - m] / sqf[n + m - 1] * sqf[n + m] / sqf[n + m - 1] * 
-        powers_ephi[m + 1]; 
-    }
-  }
-  
-  for (int n = 2; n <= p; ++n) {
-    for (int m = 1; m <= n; ++m) {
-      s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m - 1)] * 
-        sqf[n - m] / sqf[n + m - 3] * sqf[n + m] / sqf[n + m - 3] * 
-        powers_ephi[m + 1]; 
-    }
-  }
-  
-  return s1 - conj(s2); 
-}
-
-// Compute (d/dx + i * d/dy)^2 of a local expansion
-dcomplex_t RPY::gradientpp_L(int p, const dcomplex_t *L, const double *sqf, 
-                             const double *powers_r, const double *legendre,
-                             const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 4; n <= p; ++n) {
-    for (int m = 0; m <= n - 4; ++m) {
-      s1 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m + 1)] *
-        sqf[n - m] / sqf[n + m] * powers_ephi[m + 2]; 
-    }
-  }
-  
-  for (int n = 2; n <= p; ++n) {
-    for (int m = 2; m <= n; ++m) {
-      s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m - 2)] * 
-        sqf[n + m] / sqf[n + m - 4] * sqf[n - m] / sqf[n + m - 4] *
-        powers_ephi[m - 2]; 
-    }
-  }
-  
-  return s1 + conj(s2); 
-}
-
-// Compute (d/dx - i * d/dy) * (d/dx + i * d/dy) of a local expansion
-double RPY::gradientmp_L(int p, const dcomplex_t *L, const double *sqf, 
-                         const double *powers_r, const double *legendre, 
-                         const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 2; n <= p; ++n) {
-    s1 -= L[midx(n, 0)] * ((double) n * (n - 1)) * powers_r[n - 2] * 
-      legendre[midx(n - 2, 0)]; 
-    
-    for (int m = 1; m <= n; ++m) {
-      s2 -= L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m)] * 
-        sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2] *
-        powers_ephi[m]; 
-    }
-  }
-  
-  return real(s1 + 2.0 * s2);
-}
-
-// Compute d^2/dz^2 of a local expansion
-double RPY::gradient00_L(int p, const dcomplex_t *L, const double *sqf, 
-                         const double *powers_r, const double *legendre, 
-                         const dcomplex_t *powers_ephi) const {
-  dcomplex_t s1{0.0, 0.0}, s2{0.0, 0.0}; 
-  
-  for (int n = 2; n <= p; ++n) {
-    s1 += L[midx(n, 0)] * ((double) n * (n - 1)) * legendre[midx(n - 2, 0)] * 
-        powers_r[n - 2]; 
-    
-    for (int m = 1; m <= n - 2; ++m) {
-      s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m)] * 
-        sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2]; 
-    }
-  }
-  
-  return real(s1 + 2.0 * s2); 
-}
-
-
 } // namespace dashmm

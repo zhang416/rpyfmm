@@ -35,7 +35,7 @@ public:
 private: 
   double a_;     // Radius of the bead 
   double kb_;    // Boltzmann constant 
-  double T_;     // Absolute temperate
+  double T_;     // Absolute temperature
   double eta_;   // Solvent viscosity
   double c0_; 
   double c1_; 
@@ -54,6 +54,15 @@ struct Bead {
   double q[3] = {0.0};      // "charges" carried by the bead
   double value[3] = {0.0}; 
 }; 
+
+
+std::vector<double> rpy_m_to_t(Point t, double scale, 
+                               const dcomplex_t *M1, const dcomplex_t *M2, 
+                               const dcomplex_t *M3, const dcomplex_t *M4);
+
+std::vector<double> rpy_l_to_t(Point t, double scale, 
+                               const dcomplex_t *L1, const dcomplex_t *L2, 
+                               const dcomplex_t *L3, const dcomplex_t *L4);
 
 template <typename Source, typename Target> 
 class RPY {
@@ -299,7 +308,7 @@ public:
           v0 += t1 * q0 + x * t0 + t2 * q0 - t3 * t0 * x;
           v1 += t1 * q1 + y * t0 + t2 * q1 - t3 * t0 * y;
           v2 += t1 * q2 + z * t0 + t2 * q2 - t3 * t0 * z;
-        } else {
+        } else if (r > 0) {
           double c3 = 9.0 / 32.0 / a; 
           double c4 = 3.0 / 32.0 / a;
           double A1 = c0 * (1 - c3 * r); 
@@ -381,8 +390,13 @@ public:
   static void update_table(int n_digits, double domain_size, 
                            const std::vector<double> &kernel_params) {
     update_laplace_table(n_digits, domain_size); 
-    update_rpy_table(kernel_params[0], kernel_params[1], 
-                     kernel_params[2], kernel_params[3]); 
+    if (kernel_params.size() == 1) {
+      update_rpy_table(kernel_params[0]); 
+    } else {
+      assert(kernel_params.size() == 4); 
+      update_rpy_table(kernel_params[0], kernel_params[1], 
+                       kernel_params[2], kernel_params[3]); 
+    }
   }
 
   static void delete_table() { } 
