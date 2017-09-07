@@ -124,8 +124,7 @@ dcomplex_t gradientpp_M(int p, const dcomplex_t *M, const double *sqf,
   for (int n = 1; n <=p; ++n) {
     // m = 1
     s2 -= M[midx(n, 1)] * powers_r[n + 2] * legendre[midx(n + 2, 1)] * 
-      sqf[n + 3] / sqf[n - 1] * sqf[n + 3] / sqf[n + 1] * 
-      conj(powers_ephi[1]); 
+      sqf[n + 1] / sqf[n - 1] * conj(powers_ephi[1]); 
   }
   
   return s1 + conj(s2); 
@@ -406,6 +405,11 @@ dcomplex_t gradientpp_L(int p, const dcomplex_t *L, const double *sqf,
         powers_ephi[m - 2]; 
     }
   }
+
+  for (int n = 3; n <= p; ++n) {
+    s2 -= L[midx(n, 1)] * powers_r[n - 2] * legendre[midx(n - 2, 1)] * 
+      sqf[n + 1] / sqf[n - 1] * conj(powers_ephi[1]); 
+  }
   
   return s1 + conj(s2); 
 }
@@ -427,7 +431,7 @@ double gradientmp_L(int p, const dcomplex_t *L, const double *sqf,
     }
   }
   
-  return real(s1 + 2.0 * s2);
+  return (s1 + 2.0 * real(s2)); 
 }
 
 // Compute d^2/dz^2 of a local expansion
