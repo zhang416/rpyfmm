@@ -26,7 +26,7 @@ double eval_M(int p, const dcomplex_t *M, const double *sqf,
   
   for (int n = 1; n <= p; ++n) {
     for (int m = 1; m <= n; ++m) {
-      s1 += 2.0 * real(M[midx(n, m)]) * powers_ephi[m] * 
+      s1 += 2.0 * real(M[midx(n, m)] * powers_ephi[m]) * 
         powers_r[n] * legendre[midx(n, m)] * sqf[n - m] / sqf[n + m];
     }
   }
@@ -307,7 +307,7 @@ double eval_L(int p, const dcomplex_t *L, const double *sqf,
   
   for (int n = 1; n <= p; ++n) {
     for (int m = 1; m <= n; ++m) {
-      s1 += 2.0 * real(L[midx(n, m)]) * powers_ephi[m] * 
+      s1 += 2.0 * real(L[midx(n, m)] * powers_ephi[m]) * 
         powers_r[n] * legendre[midx(n, m)] * sqf[n - m] / sqf[n + m];
     }
   }
@@ -376,10 +376,10 @@ dcomplex_t gradientp0_L(int p, const dcomplex_t *L, const double *sqf,
   }
   
   for (int n = 2; n <= p; ++n) {
-    for (int m = 1; m <= n; ++m) {
+    for (int m = 1; m <= n - 1; ++m) {
       s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m - 1)] * 
         sqf[n - m] / sqf[n + m - 3] * sqf[n + m] / sqf[n + m - 3] * 
-        powers_ephi[m + 1]; 
+        powers_ephi[m - 1]; 
     }
   }
   
@@ -394,7 +394,7 @@ dcomplex_t gradientpp_L(int p, const dcomplex_t *L, const double *sqf,
   
   for (int n = 4; n <= p; ++n) {
     for (int m = 0; m <= n - 4; ++m) {
-      s1 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m + 1)] *
+      s1 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m + 2)] *
         sqf[n - m] / sqf[n + m] * powers_ephi[m + 2]; 
     }
   }
@@ -420,7 +420,7 @@ double gradientmp_L(int p, const dcomplex_t *L, const double *sqf,
     s1 -= L[midx(n, 0)] * ((double) n * (n - 1)) * powers_r[n - 2] * 
       legendre[midx(n - 2, 0)]; 
     
-    for (int m = 1; m <= n; ++m) {
+    for (int m = 1; m <= n - 2; ++m) {
       s2 -= L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m)] * 
         sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2] *
         powers_ephi[m]; 
@@ -442,7 +442,8 @@ double gradient00_L(int p, const dcomplex_t *L, const double *sqf,
     
     for (int m = 1; m <= n - 2; ++m) {
       s2 += L[midx(n, m)] * powers_r[n - 2] * legendre[midx(n - 2, m)] * 
-        sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2]; 
+        sqf[n + m] / sqf[n + m - 2] * sqf[n - m] / sqf[n + m - 2] * 
+        powers_ephi[m]; 
     }
   }
   
