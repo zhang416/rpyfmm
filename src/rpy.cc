@@ -170,7 +170,7 @@ double gradient00_M(int p, const dcomplex_t *M, const double *sqf,
   return real(s1 + 2.0 * s2); 
 }
 
-std::vector<double> rpy_m_to_t(Point t, double scale, 
+std::vector<double> rpy_m_to_t(const Point &t, const Point &c, double scale, 
                                const dcomplex_t *M1, const dcomplex_t *M2, 
                                const dcomplex_t *M3, const dcomplex_t *M4) {
   std::vector<double> retval(3, 0.0); 
@@ -187,16 +187,20 @@ std::vector<double> rpy_m_to_t(Point t, double scale,
   double x = t.x(); 
   double y = t.y(); 
   double z = t.z(); 
-  double proj = sqrt(x * x + y * y); 
-  double r = t.norm(); 
+
+  double x0 = t.x() - c.x(); 
+  double y0 = t.y() - c.y(); 
+  double z0 = t.z() - c.z(); 
+  double proj = sqrt(x0 * x0 + y0 * y0); 
+  double r = sqrt(x0 * x0 + y0 * y0 + z0 * z0);  
   double scale2 = scale * scale; 
   
   // Compute cosine of the polar angle theta
-  double ctheta = (r <= 1e-14 ? 1.0 : z / r); 
+  double ctheta = (r <= 1e-14 ? 1.0 : z0 / r); 
   
   // Compute exp(i * phi) for the azimuthal angle phi
   dcomplex_t ephi = (proj / r <= 1e-14 ? dcomplex_t{1.0, 0.0} : 
-                     dcomplex_t{x / proj, y / proj}); 
+                     dcomplex_t{x0 / proj, y0 / proj}); 
   
   // Compute powers of 1 / r
   powers_r[0] = 1.0 / r; 
@@ -225,13 +229,13 @@ std::vector<double> rpy_m_to_t(Point t, double scale,
     retval[1] -= c1 * x * imag(s3) / scale; 
     
     auto s4 = gradientp0_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] += c2 * real(s4) / scale2; 
+    retval[2] -= c2 * real(s4) / scale2; 
     
     auto s5 = gradientpp_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
     auto s6 = gradientmp_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
     
-    retval[0] += c2 * real(s5 + s6) / 2 / scale2; 
-    retval[1] += c2 * imag(s5) / 2 / scale2; 
+    retval[0] -= c2 * real(s5 + s6) / 2 / scale2; 
+    retval[1] -= c2 * imag(s5) / 2 / scale2; 
   }
 
   // Process M2
@@ -247,13 +251,13 @@ std::vector<double> rpy_m_to_t(Point t, double scale,
     retval[1] -= c1 * y * imag(s3) / scale;
     
     auto s4 = gradientp0_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] += c2 * imag(s4) / scale2; 
+    retval[2] -= c2 * imag(s4) / scale2; 
     
     auto s5 = gradientpp_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
     auto s6 = gradientmp_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
     
-    retval[0] += c2 * imag(s5) / 2 / scale2; 
-    retval[1] += c2 * real(s6 - s5) / 2 / scale2; 
+    retval[0] -= c2 * imag(s5) / 2 / scale2; 
+    retval[1] -= c2 * real(s6 - s5) / 2 / scale2; 
   }
   
   // Process M3 
@@ -269,21 +273,21 @@ std::vector<double> rpy_m_to_t(Point t, double scale,
     retval[1] -= c1 * z * imag(s3) / scale; 
     
     auto s4 = gradientp0_M(p, M3, sqf, powers_r, legendre, powers_ephi);
-    retval[0] += c2 * real(s4) / scale2;
-    retval[1] += c2 * imag(s4) / scale2; 
+    retval[0] -= c2 * real(s4) / scale2;
+    retval[1] -= c2 * imag(s4) / scale2; 
     
     auto s5 = gradient00_M(p, M3, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] += c2 * s5 / scale2;
+    retval[2] -= c2 * s5 / scale2;
   }
 
   // Process L4 
   {
     auto s1 = gradient0_M(p, M4, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] += s1 / scale; 
+    retval[2] += c1 * s1 / scale; 
     
     auto s2 = gradientp_M(p, M4, sqf, powers_r, legendre, powers_ephi); 
-    retval[0] += real(s2) / scale; 
-    retval[1] += imag(s2) / scale;
+    retval[0] += c1 * real(s2) / scale; 
+    retval[1] += c1 * imag(s2) / scale;
   }
   
   delete [] powers_r; 
@@ -431,7 +435,7 @@ double gradientmp_L(int p, const dcomplex_t *L, const double *sqf,
     }
   }
   
-  return (s1 + 2.0 * real(s2)); 
+  return real(s1 + 2.0 * s2); 
 }
 
 // Compute d^2/dz^2 of a local expansion
@@ -454,7 +458,7 @@ double gradient00_L(int p, const dcomplex_t *L, const double *sqf,
   return real(s1 + 2.0 * s2); 
 }
 
-std::vector<double> rpy_l_to_t(Point t, double scale, 
+std::vector<double> rpy_l_to_t(const Point &t, const Point &c, double scale, 
                                const dcomplex_t *L1, const dcomplex_t *L2,
                                const dcomplex_t *L3, const dcomplex_t *L4) {
   std::vector<double> retval(3, 0.0); 
@@ -474,16 +478,20 @@ std::vector<double> rpy_l_to_t(Point t, double scale,
   double x = t.x(); 
   double y = t.y(); 
   double z = t.z(); 
-  double proj = sqrt(x * x + y * y); 
-  double r = t.norm(); 
+
+  double x0 = t.x() - c.x(); 
+  double y0 = t.y() - c.y(); 
+  double z0 = t.z() - c.z(); 
+  double proj = sqrt(x0 * x0 + y0 * y0); 
+  double r = sqrt(x0 * x0 + y0 * y0 + z0 * z0); 
   double scale2 = scale * scale; 
   
   // Compute cosine of the polar angle theta
-  double ctheta = (r <= 1e-14 ? 1.0 : z / r); 
+  double ctheta = (r <= 1e-14 ? 1.0 : z0 / r); 
   
   // Compute exp(i * phi) for the azimuthal angle phi
   dcomplex_t ephi = (proj / r <= 1e-14 ? dcomplex_t{1.0, 0.0} : 
-                     dcomplex_t{x / proj, y / proj}); 
+                     dcomplex_t{x0 / proj, y0 / proj}); 
   
   // Compute powers of r 
   r *= scale; 
@@ -510,13 +518,13 @@ std::vector<double> rpy_l_to_t(Point t, double scale,
     retval[1] -= c1 * x * imag(s3) * scale; 
     
     auto s4 = gradientp0_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] += c2 * real(s4) * scale2; 
+    retval[2] -= c2 * real(s4) * scale2; 
     
     auto s5 = gradientpp_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
     auto s6 = gradientmp_L(p, L1, sqf, powers_r, legendre, powers_ephi); 
     
-    retval[0] += c2 * real(s5 + s6) / 2 * scale2; 
-    retval[1] += c2 * imag(s5) / 2 * scale2; 
+    retval[0] -= c2 * real(s5 + s6) / 2 * scale2; 
+    retval[1] -= c2 * imag(s5) / 2 * scale2; 
   }
   
   // Process L2 
@@ -532,13 +540,13 @@ std::vector<double> rpy_l_to_t(Point t, double scale,
     retval[1] -= c1 * y * imag(s3) * scale;
     
     auto s4 = gradientp0_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] += c2 * imag(s4) * scale2; 
+    retval[2] -= c2 * imag(s4) * scale2; 
     
     auto s5 = gradientpp_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
     auto s6 = gradientmp_L(p, L2, sqf, powers_r, legendre, powers_ephi); 
     
-    retval[0] += c2 * imag(s5) / 2 * scale2; 
-    retval[1] += c2 * real(s6 - s5) / 2 * scale2; 
+    retval[0] -= c2 * imag(s5) / 2 * scale2; 
+    retval[1] -= c2 * real(s6 - s5) / 2 * scale2; 
   }
   
   // Process L3 
@@ -554,21 +562,21 @@ std::vector<double> rpy_l_to_t(Point t, double scale,
     retval[1] -= c1 * z * imag(s3) * scale; 
     
     auto s4 = gradientp0_L(p, L3, sqf, powers_r, legendre, powers_ephi);
-    retval[0] += c2 * real(s4) * scale2;
-    retval[1] += c2 * imag(s4) * scale2; 
+    retval[0] -= c2 * real(s4) * scale2;
+    retval[1] -= c2 * imag(s4) * scale2; 
     
     auto s5 = gradient00_L(p, L3, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] += c2 * s5 * scale2;
+    retval[2] -= c2 * s5 * scale2;
   }
 
   // Process L4 
   {
     auto s1 = gradient0_L(p, L4, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] += s1 * scale; 
+    retval[2] += c1 * s1 * scale; 
     
     auto s2 = gradientp_L(p, L4, sqf, powers_r, legendre, powers_ephi); 
-    retval[0] += real(s2) * scale; 
-    retval[1] += imag(s2) * scale;
+    retval[0] += c1 * real(s2) * scale; 
+    retval[1] += c1 * imag(s2) * scale;
   }
 
   delete [] powers_r; 

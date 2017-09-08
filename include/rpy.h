@@ -56,11 +56,11 @@ struct Bead {
 }; 
 
 
-std::vector<double> rpy_m_to_t(Point t, double scale, 
+std::vector<double> rpy_m_to_t(const Point &t, const Point &c, double scale, 
                                const dcomplex_t *M1, const dcomplex_t *M2, 
                                const dcomplex_t *M3, const dcomplex_t *M4);
 
-std::vector<double> rpy_l_to_t(Point t, double scale, 
+std::vector<double> rpy_l_to_t(const Point &t, const Point &c, double scale, 
                                const dcomplex_t *L1, const dcomplex_t *L2, 
                                const dcomplex_t *L3, const dcomplex_t *L4);
 
@@ -167,9 +167,8 @@ public:
       lap_s_to_m(dist, i->q[0], scale, M1); 
       lap_s_to_m(dist, i->q[1], scale, M2); 
       lap_s_to_m(dist, i->q[2], scale, M3); 
-      double q4 = -c1 * (i->q[0] * i->position.x() + 
-                         i->q[1] * i->position.y() + 
-                         i->q[2] * i->position.z()); 
+      double q4 = i->q[0] * i->position.x() + 
+        i->q[1] * i->position.y() + i->q[2] * i->position.z(); 
       lap_s_to_m(dist, q4, scale, M4); 
     }
 
@@ -193,9 +192,8 @@ public:
       lap_s_to_l(dist, i->q[0], scale, L1); 
       lap_s_to_l(dist, i->q[1], scale, L2); 
       lap_s_to_l(dist, i->q[2], scale, L3); 
-      double q4 = -c1 * (i->q[0] * i->position.x() + 
-                         i->q[1] * i->position.y() + 
-                         i->q[2] * i->position.z()); 
+      double q4 = i->q[0] * i->position.x() + 
+        i->q[1] * i->position.y() + i->q[2] * i->position.z(); 
       lap_s_to_l(dist, q4, scale, L4); 
     }
 
@@ -205,15 +203,15 @@ public:
   
   std::unique_ptr<expansion_t> M_to_M(int from_child) const {
     dcomplex_t *M1 = reinterpret_cast<dcomplex_t *>(views_.view_data(0));
-    dcomplex_t *M2 = reinterpret_cast<dcomplex_t *>(views_.view_data(0));
-    dcomplex_t *M3 = reinterpret_cast<dcomplex_t *>(views_.view_data(0));
-    dcomplex_t *M4 = reinterpret_cast<dcomplex_t *>(views_.view_data(0));
+    dcomplex_t *M2 = reinterpret_cast<dcomplex_t *>(views_.view_data(1));
+    dcomplex_t *M3 = reinterpret_cast<dcomplex_t *>(views_.view_data(2));
+    dcomplex_t *M4 = reinterpret_cast<dcomplex_t *>(views_.view_data(3));
 
     expansion_t *ret{new expansion_t{kSourcePrimary}};
     dcomplex_t *W1 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(0));
-    dcomplex_t *W2 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(0));
-    dcomplex_t *W3 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(0));
-    dcomplex_t *W4 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(0));
+    dcomplex_t *W2 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(1));
+    dcomplex_t *W3 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(2));
+    dcomplex_t *W4 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(3));
 
     lap_m_to_m(from_child, M1, W1);
     lap_m_to_m(from_child, M2, W2);
@@ -250,13 +248,13 @@ public:
   void M_to_T(Target *first, Target *last) const {
     double scale = views_.scale();
     dcomplex_t *M1 = reinterpret_cast<dcomplex_t *>(views_.view_data(0));
-    dcomplex_t *M2 = reinterpret_cast<dcomplex_t *>(views_.view_data(0));
-    dcomplex_t *M3 = reinterpret_cast<dcomplex_t *>(views_.view_data(0));
-    dcomplex_t *M4 = reinterpret_cast<dcomplex_t *>(views_.view_data(0));
+    dcomplex_t *M2 = reinterpret_cast<dcomplex_t *>(views_.view_data(1));
+    dcomplex_t *M3 = reinterpret_cast<dcomplex_t *>(views_.view_data(2));
+    dcomplex_t *M4 = reinterpret_cast<dcomplex_t *>(views_.view_data(3));
 
     for (auto i = first; i != last; ++i) {
-      Point dist = point_sub(i->position, views_.center()); 
-      auto result = rpy_m_to_t(dist, scale, M1, M2, M3, M4); 
+      auto result = rpy_m_to_t(i->position, views_.center(), scale, 
+                               M1, M2, M3, M4); 
 
       i->value[0] += result[0]; 
       i->value[1] += result[1];
@@ -272,9 +270,8 @@ public:
     dcomplex_t *L4 = reinterpret_cast<dcomplex_t *>(views_.view_data(3));
     
     for (auto i = first; i != last; ++i) {
-      Point dist = point_sub(i->position, views_.center()); 
-      auto result = rpy_l_to_t(dist, scale, L1, L2, L3, L4); 
-      
+      auto result = rpy_l_to_t(i->position, views_.center(), scale, 
+                               L1, L2, L3, L4);       
       i->value[0] += result[0]; 
       i->value[1] += result[1]; 
       i->value[2] += result[2]; 
@@ -297,17 +294,16 @@ public:
         double q0 = j->q[0]; 
         double q1 = j->q[1];
         double q2 = j->q[2]; 
-        double r = sqrt(x * x + y * y + z * z); 
+        double r = sqrt(x * x + y * y + z * z);        
 
         if (r >= 2 * a) {
-          double t0 = (q0 * x + q1 * y + q2 * z) / pow(r, 3); 
-          double t1 = c1 / r; 
-          double t2 = c2 / pow(r, 3); 
-          double t3 = 3 * c2 / pow(r, 2); 
+          double A = (q0 * x + q1 * y + q2 * z) * 
+            (c1 / pow(r, 3) - 3 * c2 / pow(r, 5)); 
+          double B = c1 / r + c2 / pow(r, 3); 
 
-          v0 += t1 * q0 + x * t0 + t2 * q0 - t3 * t0 * x;
-          v1 += t1 * q1 + y * t0 + t2 * q1 - t3 * t0 * y;
-          v2 += t1 * q2 + z * t0 + t2 * q2 - t3 * t0 * z;
+          v0 += q0 * B + A * x; 
+          v1 += q1 * B + A * y; 
+          v2 += q2 * B + A * z; 
         } else if (r > 0) {
           double c3 = 9.0 / 32.0 / a; 
           double c4 = 3.0 / 32.0 / a;
