@@ -130,7 +130,7 @@ dcomplex_t gradientpp_M(int p, const dcomplex_t *M, const double *sqf,
   return s1 + conj(s2); 
 }
 
-// Compute (d/dx - i * d/dy) * (d/dx + i * d/dy) of a local expansion
+// Compute (d/dx - i * d/dy) * (d/dx + i * d/dy) of a multipole expansion
 double gradientmp_M(int p, const dcomplex_t *M, const double *sqf, 
                     const double *powers_r, const double *legendre,
                     const dcomplex_t *powers_ephi) {
