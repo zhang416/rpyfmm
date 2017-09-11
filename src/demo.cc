@@ -181,7 +181,7 @@ dashmm::Array<dashmm::Bead> prepare_beads(const InputArguments &args) {
   }
 
   dashmm::Array<dashmm::Bead> retval{}; 
-  auto err = retval.allocate(args.num_beads, beads); 
+  auto err = retval.allocate(num_beads, beads); 
   assert(err == dashmm::kSuccess); 
 
   return retval; 
