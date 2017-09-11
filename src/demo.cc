@@ -148,7 +148,6 @@ dashmm::Array<dashmm::Bead> prepare_beads(const InputArguments &args) {
 
   beads = new dashmm::Bead[num_beads]; 
  
-  srand(1); 
   if (args.distribution == std::string{"cube"}) {
     // Cube 
     for (int i = 0; i < num_beads; ++i) {
@@ -229,7 +228,7 @@ void perform_evaluation_test(const InputArguments &args) {
   // (3) Absolute temperature
   // (4) Solvent viscosity 
   std::vector<double> kparams(1, args.radius); 
-  
+
   std::cout << "\nFMM Evaluation\n"; 
   auto err = rpy_fmm97.evaluate(bead_handle, bead_handle, args.threshold, 
                                 &fmm97, args.accuracy, &kparams); 
@@ -290,8 +289,7 @@ void perform_evaluation_test(const InputArguments &args) {
   }
 
   // Free up resources 
-  err = bead_handle.destroy(); 
-  assert(err == dashmm::kSuccess); 
+  assert(bead_handle.destroy() == dashmm::kSuccess); 
 }
  
 // Program entry point
