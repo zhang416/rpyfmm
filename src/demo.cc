@@ -147,9 +147,17 @@ dashmm::Array<dashmm::Bead> prepare_beads(const InputArguments &args) {
   }
 
   beads = new dashmm::Bead[num_beads]; 
+
+  // A simple but not very effective way to generate same beads for strong
+  // scaling tests 
+  srand(1); 
  
   if (args.distribution == std::string{"cube"}) {
     // Cube 
+    for (int i = 0; i < offset * 6; ++i) {
+      int unused = rand(); 
+    } 
+
     for (int i = 0; i < num_beads; ++i) {
       beads[i].index = offset + i; 
       double temp[6]; 
@@ -162,6 +170,10 @@ dashmm::Array<dashmm::Bead> prepare_beads(const InputArguments &args) {
     }
   } else {
     // Sphere 
+    for (int i = 0; i < offset * 5; ++i) {
+      int unused = rand(); 
+    }
+
     for (int i = 0; i < num_beads; ++i) {
       beads[i].index = offset + i; 
       double temp[5]; 
