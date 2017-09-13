@@ -31,7 +31,7 @@ void print_usage(char *program) {
     << "--radius=num                   radius of bead, default is 0.001\n"
     << "--distribution=[cube|sphere]   distribution of beads, default is cube\n"
     << "--threshold=num                max beads per leaf box, default is 80\n"
-    << "--accuracy=[3|6]               accurate digits, default is 3\n"
+    << "--accuracy=[3|6|9]             accurate digits, default is 3\n"
     << "--verify=[yes|no]              verify accuracy, default is false\n";
 }
 
@@ -103,7 +103,7 @@ bool read_arguments(int argc, char **argv, InputArguments &retval) {
     return false;
   }
 
-  if (retval.accuracy != 3 && retval.accuracy != 6) {
+  if (retval.accuracy != 3 && retval.accuracy != 6 && retval.accuracy !=9 ) {
     fprintf(stderr, "Usage ERROR: unsupported accuracy input.\n");
     return false;
   }
