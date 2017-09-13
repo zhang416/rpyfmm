@@ -194,7 +194,8 @@ std::vector<double> rpy_m_to_t(const Point &t, const Point &c, double scale,
   double proj = sqrt(x0 * x0 + y0 * y0); 
   double r = sqrt(x0 * x0 + y0 * y0 + z0 * z0);  
   double scale2 = scale * scale; 
-  
+  double scale3 = scale2 * scale; 
+
   // Compute cosine of the polar angle theta
   double ctheta = (r <= 1e-14 ? 1.0 : z0 / r); 
   
@@ -202,12 +203,20 @@ std::vector<double> rpy_m_to_t(const Point &t, const Point &c, double scale,
   dcomplex_t ephi = (proj / r <= 1e-14 ? dcomplex_t{1.0, 0.0} : 
                      dcomplex_t{x0 / proj, y0 / proj}); 
   
+  // Compute powers of 1 / (r * scale)
+  r *= scale; 
+  powers_r[0] = 1.0 / r; 
+  for (int j = 1; j <= p + 2; ++j) 
+    powers_r[j] = powers_r[j - 1] / r; 
+
+  /*
   // Compute powers of 1 / r
   powers_r[0] = 1.0 / r; 
   r *= scale; 
   for (int j = 1; j <= p + 2; ++j) 
     powers_r[j] = powers_r[j - 1] / r; 
-  
+  */
+
   // Compute powers of exp(i * phi)
   powers_ephi[0] = dcomplex_t{1.0, 0.0}; 
   for (int j = 1; j <= p + 2; ++j) 
@@ -219,75 +228,75 @@ std::vector<double> rpy_m_to_t(const Point &t, const Point &c, double scale,
   // Process M1
   {
     auto s1 = eval_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
-    retval[0] += c1 * s1; 
+    retval[0] += c1 * s1 * scale; 
     
     auto s2 = gradient0_M(p, M1, sqf, powers_r, legendre, powers_ephi);
-    retval[2] -= c1 * x * s2 / scale; 
+    retval[2] -= c1 * x * s2 * scale2; 
     
     auto s3 = gradientp_M(p, M1, sqf, powers_r, legendre, powers_ephi);
-    retval[0] -= c1 * x * real(s3) / scale; 
-    retval[1] -= c1 * x * imag(s3) / scale; 
+    retval[0] -= c1 * x * real(s3) * scale2; 
+    retval[1] -= c1 * x * imag(s3) * scale2; 
     
     auto s4 = gradientp0_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] -= c2 * real(s4) / scale2; 
+    retval[2] -= c2 * real(s4) * scale3; 
     
     auto s5 = gradientpp_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
     auto s6 = gradientmp_M(p, M1, sqf, powers_r, legendre, powers_ephi); 
     
-    retval[0] -= c2 * real(s5 + s6) / 2 / scale2; 
-    retval[1] -= c2 * imag(s5) / 2 / scale2; 
+    retval[0] -= c2 * real(s5 + s6) / 2 * scale3; 
+    retval[1] -= c2 * imag(s5) / 2 * scale3; 
   }
 
   // Process M2
   {
     auto s1 = eval_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
-    retval[1] += c1 * s1; 
+    retval[1] += c1 * s1 * scale; 
     
     auto s2 = gradient0_M(p, M2, sqf, powers_r, legendre, powers_ephi);
-    retval[2] -= c1 * y * s2 / scale; 
+    retval[2] -= c1 * y * s2 * scale2; 
     
     auto s3 = gradientp_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
-    retval[0] -= c1 * y * real(s3) / scale; 
-    retval[1] -= c1 * y * imag(s3) / scale;
+    retval[0] -= c1 * y * real(s3) * scale2; 
+    retval[1] -= c1 * y * imag(s3) * scale2;
     
     auto s4 = gradientp0_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] -= c2 * imag(s4) / scale2; 
+    retval[2] -= c2 * imag(s4) * scale3; 
     
     auto s5 = gradientpp_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
     auto s6 = gradientmp_M(p, M2, sqf, powers_r, legendre, powers_ephi); 
     
-    retval[0] -= c2 * imag(s5) / 2 / scale2; 
-    retval[1] -= c2 * real(s6 - s5) / 2 / scale2; 
+    retval[0] -= c2 * imag(s5) / 2 * scale3; 
+    retval[1] -= c2 * real(s6 - s5) / 2 * scale3; 
   }
   
   // Process M3 
   {
     auto s1 = eval_M(p, M3, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] += c1 * s1; 
+    retval[2] += c1 * s1 * scale; 
     
     auto s2 = gradient0_M(p, M3, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] -= c1 * z * s2 / scale; 
+    retval[2] -= c1 * z * s2 * scale2; 
     
     auto s3 = gradientp_M(p, M3, sqf, powers_r, legendre, powers_ephi); 
-    retval[0] -= c1 * z * real(s3) / scale; 
-    retval[1] -= c1 * z * imag(s3) / scale; 
+    retval[0] -= c1 * z * real(s3) * scale2; 
+    retval[1] -= c1 * z * imag(s3) * scale2; 
     
     auto s4 = gradientp0_M(p, M3, sqf, powers_r, legendre, powers_ephi);
-    retval[0] -= c2 * real(s4) / scale2;
-    retval[1] -= c2 * imag(s4) / scale2; 
+    retval[0] -= c2 * real(s4) * scale3;
+    retval[1] -= c2 * imag(s4) * scale3; 
     
     auto s5 = gradient00_M(p, M3, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] -= c2 * s5 / scale2;
+    retval[2] -= c2 * s5 * scale3;
   }
 
   // Process L4 
   {
     auto s1 = gradient0_M(p, M4, sqf, powers_r, legendre, powers_ephi); 
-    retval[2] += c1 * s1 / scale; 
+    retval[2] += c1 * s1 * scale2; 
     
     auto s2 = gradientp_M(p, M4, sqf, powers_r, legendre, powers_ephi); 
-    retval[0] += c1 * real(s2) / scale; 
-    retval[1] += c1 * imag(s2) / scale;
+    retval[0] += c1 * real(s2) * scale2; 
+    retval[1] += c1 * imag(s2) * scale2;
   }
   
   delete [] powers_r; 

@@ -183,12 +183,11 @@ dashmm::Array<dashmm::Bead> prepare_beads(const InputArguments &args) {
       beads[i].q[1] = temp[1];
       beads[i].q[2] = temp[2];
 
-      double stheta = sin(temp[3]) * M_PI; 
-      double ctheta = cos(temp[3]) * M_PI; 
-      double sphi = sin(temp[4]) * M_PI; 
-      double cphi = cos(temp[4]) * M_PI; 
-      beads[i].position = 
-        dashmm::Point{stheta * sphi, stheta * cphi, ctheta}; 
+      double theta = temp[3] * M_PI; 
+      double phi = temp[4] * M_PI; 
+      beads[i].position = dashmm::Point{sin(theta) * sin(phi), 
+                                        sin(theta) * cos(phi), 
+                                        cos(theta)};
     }
   }
 
