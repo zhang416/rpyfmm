@@ -155,7 +155,6 @@ public:
                                       const Source *last) const {
     Point center = views_.center(); 
     double scale = views_.scale(); 
-    double c1 = rpy_table_->c1(); 
     expansion_t *ret{new expansion_t{kSourcePrimary, scale, center}}; 
     dcomplex_t *M1 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(0)); 
     dcomplex_t *M2 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(1)); 
@@ -180,7 +179,6 @@ public:
                                       const Source *last) const {
     Point center = views_.center(); 
     double scale = views_.scale(); 
-    double c1 = rpy_table_->c1();
     expansion_t *ret{new expansion_t{kTargetPrimary}}; 
     dcomplex_t *L1 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(0)); 
     dcomplex_t *L2 = reinterpret_cast<dcomplex_t *>(ret->views_.view_data(1)); 

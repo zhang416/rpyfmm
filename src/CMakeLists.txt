@@ -1,5 +1,4 @@
 FILE(GLOB sources *.cc)
-add_executable(demo ${sources}) 
 
 include_directories(
   ${HPX_INCLUDE_DIRS}
@@ -7,4 +6,9 @@ include_directories(
   ${dashmm_SOURCE_DIR}/include
 )
 
-target_link_libraries(demo PUBLIC dashmm ${HPX_LDFLAGS}) 
+link_directories(${HPX_LIBRARY_DIRS})
+
+add_library(rpyfmm STATIC ${sources})
+target_link_libraries(rpyfmm ${HPX_LDFLAGS})
+
+install(TARGETS rpyfmm DESTINATION lib)
