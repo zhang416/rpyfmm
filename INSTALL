@@ -1,0 +1,41 @@
+Installation Instruction for RPYFMM
+
+-- Prerequisites --
+
+RPYFMM depends on two external libraries: HPX-5 and DASHMM. Users must first
+install HPX-5 on their systems. The current version of RPYFMM depends on version
+4.1.0 of HPX-5 or later, which can be found at https://hpx.crest.iu.edu/. Please
+see the official documentation for instructions on how to build, install, and
+run HPX-5 on your system. Once HPX-5 is installed, DASHMM is automatically
+downloaded by RPYFMM when the library is built. 
+
+-- Building RPYFMM --
+
+The RPYFMM library uses CMake for its build system and so CMake of version at
+least 3.4 is required. To build RPYFMM, perform the following steps. 
+
+1) Unpack the source code into some convenient directory. For the sake of
+discussion, this guide assumes that the code has been unpacked in
+/path/to/rpyfmm. 
+
+2) Create a directory in which to build RPYFMM. For the sake of discussion,
+assume that this is /path/to/rpyfmm/build
+
+3) From that directory, run 
+> cmake .. -DCMAKE_INSTALL_PREFIX=/path/to/rpyfmm/install
+
+4) Run `make` from /path/to/rpyfmm/build
+
+5) Run `make install` from /path/to/rpyfmm/build. This will install the library
+and the header files in the specified place. 
+
+-- RPYFMM demo program --
+
+A demonstration program is included with RPYFMM. The source code is found in the
+/path/to/rpyfmm/demo subfolder. The demonstration program is not built/installed
+by make install. To build it, run `make demo` in /path/to/rpyfmm/build/demo. The
+demo code creates a random distribution of beads and computes the
+Rotne-Prager-Yamakawa interaction. User can request a summary of the options to
+the demo code by running the code with `--help` as a command line argument. 
+
+
